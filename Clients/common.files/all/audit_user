@@ -1,0 +1,11 @@
+# NOTE:
+# NOTE: This configuration file has been deployed by JET
+# NOTE:
+#
+# User Level Audit User File
+#
+# File Format
+#
+#       username:always:never
+#
+root:lo:no

@@ -1,0 +1,5 @@
+# Cleanup /var/sadm space per Infodoc 208057
+40 3 * * 0 /usr/bin/find /var/sadm/pkg -name undo.Z -mtime +90 -exec rm {} \;
+50 3 * * 0 /usr/bin/find /var/sadm/pkg -name obsolete.Z -mtime +60 -exec rm {} \;
+# Cleanup /var/core
+0 5 * * * find /var/core/* -mtime +7 -exec rm {} \; > /dev/null 2>&1

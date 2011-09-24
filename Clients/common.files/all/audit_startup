@@ -1,0 +1,9 @@
+# NOTE:
+# NOTE: This configuration file has been deployed by JET
+# NOTE:
+/usr/bin/echo "Starting BSM services."
+/usr/sbin/auditconfig -setpolicy +cnt
+/usr/sbin/auditconfig -setpolicy +argv
+/usr/sbin/auditconfig -setpolicy +zonename
+/usr/sbin/auditconfig -conf
+/usr/sbin/auditconfig -aconf

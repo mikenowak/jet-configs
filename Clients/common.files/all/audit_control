@@ -1,0 +1,7 @@
+# NOTE:
+# NOTE: This configuration file has been deployed by JET
+# NOTE:
+dir:/var/audit
+flags:lo,na,ad,cs,cf,ap,vs
+minfree:20
+naflags:lo,ad

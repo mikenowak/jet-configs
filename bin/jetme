@@ -1,0 +1,204 @@
+#!/usr/bin/bash
+#
+# Copyright 2009 Michal Nowak <https://github.com/mikenowak>
+# 
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# 
+#         http://www.apache.org/licenses/LICENSE-2.0
+# 
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# 
+# DESCRIPTION
+#
+# This script acts as a validation wrapper to SUNWjet (JUMPSTART ENTERPRISE TOOLKIT),
+# prompting for and validating the hostname, ip address, and a build profile.
+#
+# DEPENDENCIES
+# * Running and configured Sun DHCP server
+# * Valid JET profiles placed in /opt/SUNWjet/Templates/Profiles/
+#
+# USAGE
+#
+# Execute from the command line and follow the on-screen prompts.
+#
+#
+PATH="/usr/xpg4/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/SUNWjet/bin:/opt/SUNWjet/Utils/serverlib:/opt/SUNWjet/Utils/lib/"; export PATH
+JETDIR=/opt/SUNWjet; export JETDIR
+ETCDIR=${JETDIR}/etc; export ETCDIR
+PROFILEDIR=${JETDIR}/Templates/Profiles
+
+# Check if SUNWjet is installed
+pkginfo SUNWjet >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+	echo "ERROR: SUNWjet is not installed on this host"
+	exit 1
+fi
+
+# Display start message
+echo "This script will setup the new jumpstart host in JET."
+echo ""
+echo "Please provide the following details about the new host that you are building:"
+echo ""
+
+# Hostname validation
+while [ 1 ]; do
+	echo -n "Enter the hostname: "
+	read hostname_test
+	
+	# test if the hostname format is correct
+	hostname=`echo $hostname_test | sed -n "/^[a-z]\([0-9a-z-]\)\{0,63\}[0-9a-z]$/p"`
+
+	if [ -z "$hostname" ]; then
+		echo "ERROR: $hostname_test is invalid hostname format."
+	else
+		break
+	fi
+done
+
+# IP address validation
+while [ 1 ]; do
+	echo -n "Enter the IP address: "
+	read ipaddr_test
+	
+	# test if the IP format is correct
+	ipaddr=`echo $ipaddr_test | awk -F"\." ' $0 ~ /^([0-9]{1,3}\.){3}[0-9]{1,3}$/ && $1 <=255 && $2 <= 255 && $3 <= 255 && $4 <= 255 '`
+	if [ -z "$ipaddr" ]; then
+		echo "ERROR: $ipaddr_test is invalid IP address format."
+	else
+		# get netmask for given IP address
+		netmask=`JS_get_netmask $ipaddr`		
+		if [ -z "$netmask" ]; then
+			echo "ERROR: Unable to find netmask for given IP address"
+		else
+			# get network address
+			subnet=`JS_get_network $ipaddr $netmask`
+			if [ -z "$subnet" ]; then
+				echo "ERROR: Unable to find network address for given IP address"
+			else
+				pntadm -L | grep "$subnet" >/dev/null 2>&1
+				if [ $? -ne 0 ]; then
+					echo "ERROR: $subnet is not configured as a jumpstart network."
+				else
+					# ensure that the selected IP address is not already in use
+					ping $ipaddr 1 >/dev/null 2>&1
+					if [ $? -eq 0 ]; then
+						echo "ERROR: IP address $ipaddr already in use."
+					else
+						# locate the default router for subnet
+						router=`JS_router_lookup $subnet $netmask`
+						if [ -z "$router" ]; then
+							echo "ERROR: Unable to find router for given network (no entry in ${ETCDIR}/defaultrouters)"
+						else
+							break
+						fi						
+					fi
+				fi
+			fi
+		fi
+	fi
+done
+
+# MAC address validation
+while [ 1 ]; do
+	echo -n "Enter the MAC address (with missing zeros): "
+	read macaddr_test
+
+	macaddr=`echo $macaddr_test | sed -n "/^\([0-9a-fA-F][0-9a-fA-F]:\)\{5\}[0-9a-fA-F][0-9a-fA-F]$/p"`
+	
+	if [ -z "$macaddr" ]; then
+		echo "ERROR: $macaddr is invalid MAC address format."
+	else
+		break
+	fi
+done
+
+# Profile selection
+while [ 1 ]; do
+	echo "Select a build profile: "
+	select p in `ls -1 ${PROFILEDIR}`; do
+		profile=$p
+	done
+
+	if [ -z "$profile" ]; then
+		echo "ERROR: invalid profile selection.
+	else
+		break
+	fi
+fi
+
+# Display confirmation dialog
+echo "*******************************************************"
+echo "             Summary of Configuration"
+echo ""
+echo "Hostname: $hostname"
+echo "IP address: $ipaddr"
+echo "Netmask: $netmask"
+echo "Router: $router"
+echo "MAC address: $macaddr"
+echo "Build profile: $profile"
+echo ""
+echo "*******************************************************"
+echo ""
+while [ 1 ]; do
+	echo -n "Do you want to continue [Y/N]? "
+	read answer
+	
+	case $answer in
+		Y|y)
+			break
+		;;
+		N|n)
+			echo "Sure thing, come back when you change your mind"
+			exit 1
+		;;
+		*)
+			echo "ERROR: Sorry, I did not understand your answer..."
+		;;
+	esac
+done
+
+# Expand password variable from global config file
+rootpasswd=`awk -F= '$1=="JS_Default_Root_PW" { print $2 }' $ETCDIR/jumpstart.conf`
+
+# Populate the template with build data
+sed -e s,@HOSTNAME@,$hostname,g   \
+	-e s,@IPADDR@,$ipaddr,g          \
+	-e s,@MACADDR@,$macaddr,g \
+	-e s,@NETMASK@,$netmask,g \
+	-e s,@ROOTPASSWD@,$rootpasswd,g \
+	-e s,@ROUTER@,$router,g $PROFILEDIR/$profile > $JETDIR/Templates/$hostname
+
+	# FIXME
+
+# Now invoke the make_client
+make_client -f $hostname
+
+if [ $? -eq 0 ]; then
+	echo "*******************************************************"
+	echo "      Your host is now ready to be jumpstarted"
+	echo ""
+	echo "Please power it on and do either:"
+	echo "* on sparc type at OBP"
+	echo "  {ok} boot net:speed=100,dhcp - install"
+	echo "* on x86 ensure that PXE is enabled in bios"
+	echo ""
+	echo "*******************************************************"
+else
+	echo "ERROR: Something went wrong, please investigate."
+	exit 1
+fi 
+
+# Wait until finished and clean up
+trap 'remove_client -F $hostname' 1 2 15
+echo ""
+echo -e "\e[0;31mPlease hit CTRL-C only *AFTER* the host finishes installing"
+echo -e "Client will be removed from JET once you do so.\e[0m"
+sleep 86400
+
+exit 0

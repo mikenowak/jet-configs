@@ -1,0 +1,37 @@
+# NOTE:
+# NOTE: This configuration file has been deployed by JET
+# NOTE:
+Port            22
+PidFile         /var/run/sshd.pid
+Protocol        2
+ListenAddress 0.0.0.0
+HostKey        /etc/ssh/ssh_host_rsa_key
+HostKey        /etc/ssh/ssh_host_dsa_key
+KeyRegenerationInterval 360
+ServerKeyBits   768
+Banner /etc/issue
+StrictModes yes
+UsePrivilegeSeparation no
+X11Forwarding yes
+X11DisplayOffset 10
+X11UseLocalhost yes
+SyslogFacility AUTH
+LogLevel INFO
+PrintMotd yes
+PrintLastLog yes
+IgnoreRhosts yes
+IgnoreUserKnownHosts yes
+UseLogin       yes
+LoginGraceTime 120
+PasswordAuthentication no
+PermitRootLogin no
+RhostsRSAAuthentication no
+HostbasedAuthentication no
+HostbasedUsesNameFromPacketOnly yes
+RSAAuthentication       no
+PubkeyAuthentication    yes
+AuthorizedKeysFile     .ssh/authorized_keys
+ChallengeResponseAuthentication no
+Subsystem       sftp    /opt/OBSDssh/libexec/sftp-server
+GatewayPorts no
+AllowTcpForwarding yes

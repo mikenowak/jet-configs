@@ -1,0 +1,173 @@
+#!/bin/sh
+#
+# modified from JASS' disable-sendmail.fin script
+#
+
+CRONTAB=${JASS_ROOT_DIR}var/spool/cron/crontabs/root
+
+svc="svc:/network/smtp:sendmail"
+
+check_crontab_for_sendmail()
+{
+   if [ -f ${CRONTAB} -a `grep "sendmail" ${CRONTAB} | wc -l` != 0 ]; then
+      logNotice 'Please verify that \\\"/usr/lib/sendmail\\\" is not being started from \\\"cron\\\" to perform queuing functions.  The sendmail operational mode is now configured using the \\\"MODE\\\" parameter in ${SENDMAIL}.'
+   fi
+}
+
+bad_sendmail_installation()
+{
+   logFileNotFound "${1}"
+   echo ""
+   logNotice "Please check your sendmail installation (packages SUNWsndmr and SUNWsndmu)."
+   logNotice "Skipping disabling of sendmail."
+}
+
+logMessage "Configuring sendmail service"
+echo ""
+
+# Solaris Secure by Default moves the sendmail local only option into the
+# SMF config.  Setting this property causes sendmail to be started using 
+# local.cf as its config file rather than sendmail.cf
+
+if check_sbd_available; then
+   if  check_serviceInstalled "${svc}" 0 ; then 
+      # Force sendmail to only process local requests
+      set_service_property_value "${svc}" \
+       "config/local_only" "true" "application" "boolean"
+   fi
+fi
+
+
+# Proceed with setting up local.cf file:
+
+if check_os_min_revision 5.9 ; then
+
+   # Create and install a modified sendmail configuration which makes
+   # the sendmail daemon listen only on the IPv4 loopback interface.
+   # Listening on the IPv6 interface is not enabled owing to difficulties
+   # in determining if the IPv6 loopback interface will be enabled or not.
+
+   # The Message Submission Agent listening on port 587 is disabled.
+   # In future mail clients should be migrating to using port 587 instead of
+   # port 25 for initial mail message submission so use of this feature should
+   # be periodically checked.
+
+
+   if check_os_revision 5.9; then
+      SENDMAIL_CONF_BASE="${JASS_ROOT_DIR}usr/lib/mail/cf"
+   else # Solaris 10 or later
+      SENDMAIL_CONF_BASE="${JASS_ROOT_DIR}etc/mail/cf/cf"
+   fi
+
+   #
+   # Check packages SUNWsndm[ru] and file sendmail.cf are present
+   #
+   pkginfo -q -R ${JASS_ROOT_DIR} SUNWsndmr
+   if [ $? != 0 ]; then
+      logNotice "Sendmail (package SUNWsndmr) does not appear to be installed."
+      logNotice "Skipping disabling of sendmail."
+
+   else
+      pkginfo -q -R ${JASS_ROOT_DIR} SUNWsndmu
+      if [ $? != 0 ]; then
+         logNotice "Sendmail (package SUNWsndmu) does not appear to be installed."
+         logNotice "Skipping disabling of sendmail."
+
+      elif [ ! -d ${SENDMAIL_CONF_BASE} ]; then
+         bad_sendmail_installation ${SENDMAIL_CONF_BASE}
+      elif [ ! -f ${JASS_ROOT_DIR}etc/mail/sendmail.cf ]; then
+         bad_sendmail_installation /etc/mail/sendmail.cf
+
+      else # ok
+         if [ ! -f ${JASS_ROOT_DIR}etc/mail/local.mc ]; then
+            logError 'local.mc file was missing, cannot proceed without it.'
+         else
+            # Move local.mc to correct location
+            cd ${SENDMAIL_CONF_BASE}
+            mv ${JASS_ROOT_DIR}etc/mail/local.mc .
+
+            # Generate sendmail.cf file from local.mc file
+            ${JASS_ROOT_DIR}usr/ccs/bin/m4 ../m4/cf.m4 local.mc > local.cf
+
+	    if [ $? != 0 ]; then
+               logError 'Creating sendmail configuration file, local.cf.'
+	    else
+	       copy_a_file local.cf ${JASS_ROOT_DIR}etc/mail/local.cf
+               cd ${JASS_ROOT_DIR}etc/mail/
+               rm sendmail.cf
+               ln -s local.cf sendmail.cf
+	    fi
+
+	    check_crontab_for_sendmail
+         fi
+      fi
+   fi
+
+elif check_os_min_revision 5.8 ; then
+
+   SENDMAIL="${JASS_ROOT_DIR}etc/default/sendmail"
+
+   if [ ! -f ${SENDMAIL} ]; then
+      SENDMAIL_MASTER="/etc/default/sendmail"
+      copy_files ${SENDMAIL_MASTER}
+   fi
+
+   oldValue=`grep '^MODE=' ${SENDMAIL} | nawk -F= '{ print $2 }' 2>/dev/null`
+
+   if [ "${oldValue}" != "${JASS_SENDMAIL_MODE}" ]; then
+
+      backup_file ${SENDMAIL}
+      echo ""
+
+      logMessage 'Setting \\\"MODE\\\" parameter to \\\"${JASS_SENDMAIL_MODE}\\\" in ${SENDMAIL}.'
+
+      cat ${SENDMAIL}.${JASS_SUFFIX} |\
+         sed 's/#.*MODE=/MODE=/g' |\
+         sed "s/^MODE=.*$/MODE=${JASS_SENDMAIL_MODE}/g" > ${SENDMAIL}
+
+      # The following case is needed if the MODE line was not
+      # found in the file.
+
+      if [ `grep -c '^MODE=' ${SENDMAIL}` = 0 ]; then
+         echo "MODE=${JASS_SENDMAIL_MODE}" >> ${SENDMAIL}
+      fi
+   fi
+
+   check_crontab_for_sendmail
+
+else # Solaris 7 or earlier
+
+   if [ "${JASS_KILL_SCRIPT_DISABLE}" = "1" ]; then
+      disable_rc_file ${JASS_ROOT_DIR}etc/rcS.d K36sendmail
+      disable_rc_file ${JASS_ROOT_DIR}etc/rc0.d K36sendmail
+      disable_rc_file ${JASS_ROOT_DIR}etc/rc0.d K57sendmail
+      disable_rc_file ${JASS_ROOT_DIR}etc/rc1.d K36sendmail
+      disable_rc_file ${JASS_ROOT_DIR}etc/rc1.d K57sendmail
+   fi
+   disable_rc_file ${JASS_ROOT_DIR}etc/rc2.d S88sendmail
+
+   # Now that sendmail has been disabled, it is important to
+   # process the mail spool occasionally, otherwise mail
+   # originating from this system will not be delivered.
+   # This spool processing is enabled using the "-q" option
+   # to sendmail.  This command will run hourly from root's crontab.
+
+   if [ -f ${CRONTAB} ]; then
+      if [ `grep '/usr/lib/sendmail -q' ${CRONTAB} | wc -l` = 0 ]; then
+
+         # This is necessary in order to preserve the original.
+         # This does not break the backout functionality as backout
+         # records this as a simple move which will move the original
+         # (saved) copy back in an undo operation is executed.
+
+         backup_file_in_safe_directory ${CRONTAB}
+         echo ""
+
+         logMessage 'Adding \\\"/usr/lib/sendmail -q\\\" to ${CRONTAB}.'
+         echo ""
+
+         echo "0 * * * * [ -x /usr/lib/sendmail ] && /usr/lib/sendmail -q > /dev/null 2>&1" >> ${CRONTAB}
+
+      fi
+   fi
+fi

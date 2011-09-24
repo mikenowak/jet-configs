@@ -1,0 +1,54 @@
+Copyright 2009 Michal Nowak <https://github.com/mikenowak>
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+DESCRIPTION
+
+This github project is a sample layout of a SUNWjet (JUMPSTART ENTERPRISE
+TOOLKIT) infrastructure that can be seen as a starting idea on how you can
+organize and manage your configuration.
+
+Also some SUNWjass (Solaris Security Toolkit) Drivers and Finish scripts,
+are maintained as part of this project, see inside Clients/common.files.
+
+The resources in this project come mainly from my previous project of
+setting and maintaining the end-to-end jumpstart solution for the Blastwave
+Build Farm <http://www.blastwave.org/>.
+
+This layout is structured the following way:
+
+bin/jetme               # A script wrapper that automates the build process.
+Clients/common.files    # Directory containing common configuration files,
+                        # and SUNWjass Finish scripts and Drivers, all nicely
+                        # grouped by the OS version.
+Clients/common.files    # Directory containing common scripts to be executed
+                        # as part of the jumpstart process, also grouped by
+                        # the OS version.
+Templates/Profiles      # Ready profiles to be used with the jetme script.
+
+
+For more information on the particular components see subdirectories for
+associated README files.
+
+USAGE
+
+You would probably want to clone this repository on the top of your SUNWjet
+installation.
+
+    # git clone git://github.com/mikenowak/jet-configs.git /opt/SUNWjet
+
+NOTE
+
+This project is not longer atcively maintained, and I might include
+bug fixes, but any new functionality is highly unlikely to appear here.
+

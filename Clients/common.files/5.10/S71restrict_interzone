@@ -1,0 +1,7 @@
+#!/sbin/sh
+#
+# This script sets the ip_restrcit_interzone_loopback value to 1, and this is
+# to force traffic out of the system on a datalink if the source and 
+# destination zones do not share a datalink.
+#
+/usr/sbin/ndd -set /dev/ip ip_restrict_interzone_loopback 1

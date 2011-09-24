@@ -1,0 +1,52 @@
+#!/bin/sh
+#
+# Copyright 2008 Michal Nowak <https://github.com/mikenowak>
+# All rights reserved. Use is subject to license terms.
+#
+# Redistribution and/or use, with or without modification, is permitted.
+# This code is without warranty of any kind. The author(s) shall not be
+# liable in the event that use of the software causes damage.
+#
+# This script sets the root alias to ${ROOT_ALIAS}.
+# All variables need to be specified in the Driver.
+#
+#
+ALIASES="${JASS_ROOT_DIR}/etc/mail/aliases"
+
+if [ -z "${ROOT_ALIAS}" ]; then
+    logError "no ROOT_ALIAS specified"
+    exit 1
+fi
+
+#
+# Install root alias and run newaliases
+#
+/usr/bin/grep "^root: ${ROOT_ALIAS}" ${ALIASES} > /dev/null 2>&1
+if [ $? -eq 1 ]; then
+    backup_file ${ALIASES}
+    echo
+
+    logMessage "Installing 'root' sendmail alias."
+    echo
+
+    /usr/bin/grep -v "^root: " ${ALIASES} > ${ALIASES}.jass_$$
+    /usr/bin/cat ${ALIASES}.jass_$$ > ${ALIASES}
+    /usr/bin/rm -f ${ALIASES}.jass_$$
+
+    echo "## BEGIN root alias -- DO NOT REMOVE" >> ${ALIASES}
+    echo "root: ${ROOT_ALIAS}" >> ${ALIASES}
+    echo "## END root alias -- DO NOT REMOVE" >> ${ALIASES}
+
+    if check_os_min_revision 5.9; then
+        NEWALIASES=usr/sbin/newaliases
+    else
+        NEWALIASES=/usr/bin/newaliases
+    fi
+
+    if [ -x ${JASS_ROOT_DIR}${NEWALIASES} ]; then
+        /usr/sbin/chroot ${JASS_ROOT_DIR} /${NEWALIASES}
+    fi
+else
+    logMessage "root alias is already present"
+    echo
+fi
