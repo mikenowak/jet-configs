@@ -1,0 +1,155 @@
+#!/bin/sh
+#
+# Copyright 2010 Michal Nowak <https://github.com/mikenowak>.
+# All rights reserved. Use is subject to license terms.
+#
+# Redistribution and/or use, with or without modification, is permitted.
+# This code is without warranty of any kind. The author(s) shall not be
+# liable in the event that use of the software causes damage.
+#
+# This script configures root as an RBAC role, and does the same to all
+# system accountes. This script also updates the /etc/pam.conf file so
+# that root can login from the console and that the cron works normally
+# for RBACed roles.
+#
+ROOTPARM="root::::type=role;auths=solaris.*,solaris.grant;profiles=All;lock_after_retries=no"
+USERADD="/usr/sbin/useradd"
+GROUPADD="/usr/sbin/groupadd"
+USERATTR=${JASS_ROOT_DIR}etc/user_attr
+PAMCONF=${JASS_ROOT_DIR}etc/pam.conf
+PAMLOGIN="login  account required        pam_unix_account.so.1"
+PAMCRON="cron   account required        pam_unix_account.so.1"
+PAMZLOGIN="zlogin  account required        pam_unix_account.so.1"
+PW="${JASS_ROOT_DIR}etc/passwd"
+SHADOW="${JASS_ROOT_DIR}etc/shadow"
+
+case `/usr/bin/uname -p` in
+        sparc)
+                MINPATCH="109007-10"
+                ;;
+        *)
+                MINPATCH="109008-10"
+                ;;
+esac
+
+# check patch level required to implement RBAC
+patchok() {
+        if check_os_revision 5.8; then
+                patchnum=`echo $MINPATCH|cut -d'-' -f1`
+                minver=`echo $MINPATCH|cut -d'-' -f2`
+                patchver="`showrev -p 2>/dev/null | grep "$patchnum" | awk '{print $2}' |\
+			grep "$patchnum" | sort -n | tail -1|cut -d'-' -f2`"
+                
+
+                if [ -z "$patchver" ]; then
+                        echo "1"
+                        return 1
+                else
+                        if [ $patchver -lt $minver ]; then
+                                echo "1"
+                                return 1
+                        fi
+                fi
+        fi
+echo "0"
+return 0
+}
+
+# Convert $1 user into an RBAC role
+convert2role() {
+    line=`/usr/bin/egrep "^${1}:" ${USERATTR}`
+
+    if [ -n "$line" ]; then
+        line="$line;type=role"
+        logMessage "    merging existing user_attr entry for ${1}"
+    else
+        line="${1}::::type=role"
+        logMessage "    creating new user_attr entry for ${1}"
+    fi
+
+    /usr/bin/egrep -v "^${1}:" ${USERATTR} > ${USERATTR}.$$
+    echo $line >> ${USERATTR}.$$
+    mv ${USERATTR}.$$ ${USERATTR}
+}
+
+# Remove /etc/user_attr entries for users who have role $1 assigned
+removefromrole() {
+        logNotice "Removing ${USERATTR} entries for users with $1 role assigned"
+        sed -e "s/\(roles=.*\),[        ]*$1[   ]*,/\1,/g" \
+                -e "s/\(roles=.*\),[    ]*$1[   ]*$/\1/" \
+                -e "s/\(roles=.*\)$1[   ]*,/\1/g" \
+                -e "/roles=[    ]*$1[   ]*$/d" ${USERATTR} > ${USERATTR}.new
+        grep -v "^$1:" ${USERATTR}.new > ${USERATTR}
+        rm -f ${USERATTR}.new
+}
+
+#############################################
+# MAIN LOOP
+#############################################
+
+if [ `patchok` -eq 0 ]; then
+        if [ -f ${USERATTR} ]; then
+                backup_file ${USERATTR}
+        fi
+
+        if [ "${JASS_OS_REVISION}" = "5.10" -a "${JASS_ZONE_NAME}" != "global" ]; then
+                # Configure PAM to enable root as RBAC role
+                if check_fileContentsExist "${PAMCONF}" "${PAMLOGIN}" 1; then
+                        logNotice "root is already as an RBAC role"
+                else
+                        backup_file ${PAMCONF}
+
+                        echo "" >> ${PAMCONF};
+                        echo "## BEGIN root RBAC role -- DO NOT REMOVE" >> ${PAMCONF};
+                        echo "${PAMLOGIN}" >> ${PAMCONF};
+                        echo "${PAMZLOGIN}" >> ${PAMCONF};
+                        echo "${PAMCRON}" >> ${PAMCONF};
+                        echo "## END root RBAC role -- DO NOT REMOVE" >> ${PAMCONF};
+
+                        echo ""
+                        logNotice "Enabling root RBAC role"
+                        echo ""
+                fi
+        else
+                # Configure PAM to enable root as RBAC role
+                if check_fileContentsExist "${PAMCONF}" "${PAMLOGIN}" 1; then
+                logNotice "root is already as an RBAC role"
+                else
+                        backup_file ${PAMCONF}
+
+                        echo "" >> ${PAMCONF};
+                        echo "## BEGIN root RBAC role -- DO NOT REMOVE" >> ${PAMCONF};
+                        echo "${PAMLOGIN}" >> ${PAMCONF};
+                        echo "${PAMCRON}" >> ${PAMCONF};
+                        echo "## END root RBAC role -- DO NOT REMOVE" >> ${PAMCONF};
+
+                        echo ""
+                        logNotice "Enabling root RBAC role"
+                        echo ""
+                fi
+        fi
+
+        # Configure Root as an RBAC role
+        if check_fileContentsExist "${USERATTR}" "${ROOTPARM}" 1; then
+                logNotice "${USERATTR} already configured with root as an RBAC role"
+        else
+                # remove /etc/user_attr entries for users with root role assigned
+                removefromrole root
+        
+                logNotice "Configuring root as an RBAC role"
+                if [ "$JASS_OS_REVISION" = "5.8" ]; then
+                echo "${ROOTPARM};roles=root" >> ${USERATTR}
+                else
+                echo "${ROOTPARM}" >> ${USERATTR}
+                fi
+        fi
+        
+        # Convert system accounts into RBAC roles
+        for i in ${JASS_ACCT_DISABLE}; do
+                if check_fileContentsExist "${PW}" "$i" 1; then
+                        convert2role $i
+                fi
+        done    
+else
+        logError "Patch $MINPATCH is not installed ... can NOT continue"
+fi
