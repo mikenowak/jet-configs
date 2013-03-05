@@ -45,7 +45,40 @@ USAGE
 You would probably want to clone this repository on the top of your SUNWjet
 installation.
 
-    # git clone git://github.com/mikenowak/jet-configs.git /opt/SUNWjet
+ # git clone git://github.com/mikenowak/jet-configs.git /opt/SUNWjet
+
+This assumes tha you have already installed SUNWjet package on your system.
+If this is however not the case, then follow the below instructions to get
+you up and running quickly.
+
+ 1) Install JET Package
+   # bunzip2 jet.pkg.bz2
+   # pkgadd -d jet.pkg all
+
+ 2) Copy Solaris Media
+   # lofiadm -a /path/to/sol-10-u8-ga-x86-dvd.iso
+   # mount -Fhsfs /dev/lofi/1 /mnt
+   # ./copy_solaris_media -n sol-10-u8-x86 /mnt
+
+ 3) Copy JASS Product
+   # gunzip /SUNWjass-4.2.2.pkg.gz
+   # vi /opt/SUNWjet/Products/jass/package.matrix
+   add
+   5.10:4.2.2:SUNWjass
+   # ./copy_product_media jass 4.2.2 /path/to/SUNWjass-4.2.2.pkg
+
+ 4) Configure DHCP
+   # pkgadd -d . SUNWdhcsr SUNWdhcsu SUNWdhcsb SUNWdhcm
+   # dhcpconfig -D -r SUNWfiles -p /var/dhcp
+   # dhcpconfig -N 192.168.1.0
+
+ 5) Add default router to JETs defaultrouters file
+   # vi /opt/SUNWjet/etc/defaultrouters
+   add
+   192.168.1.0 255.255.255.0 192.168.1.1
+
+ 6) Ready to use
+   # /opt/SUNWjet/bin/jetme
 
 NOTE
 

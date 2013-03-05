@@ -31,7 +31,7 @@
 PATH="/usr/xpg4/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/SUNWjet/bin:/opt/SUNWjet/Utils/serverlib:/opt/SUNWjet/Utils/lib/"; export PATH
 JETDIR=/opt/SUNWjet; export JETDIR
 ETCDIR=${JETDIR}/etc; export ETCDIR
-PROFILEDIR=${JETDIR}/Templates/Profiles
+PROFILEDIR=${JETDIR}/Templates/Profiles; export PROFILEDIR
 
 # Check if SUNWjet is installed
 pkginfo SUNWjet >/dev/null 2>&1
@@ -126,11 +126,11 @@ while [ 1 ]; do
 	done
 
 	if [ -z "$profile" ]; then
-		echo "ERROR: invalid profile selection.
+		echo "ERROR: invalid profile selection."
 	else
 		break
 	fi
-fi
+done
 
 # Display confirmation dialog
 echo "*******************************************************"
